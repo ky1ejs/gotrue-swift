@@ -8,7 +8,7 @@ import Get
 
 public final class GoTrueClient {
   private let url: URL
-  private let authEventChangeSubject: CurrentValueSubject<AuthChangeEvent, Never>
+  private let authEventChangeSubject: PassthroughSubject<AuthChangeEvent, Never>
   public lazy var authEventChange = authEventChangeSubject.share().eraseToAnyPublisher()
 
   public var session: Session? { Current.sessionManager.storedSession() }
@@ -23,9 +23,16 @@ public final class GoTrueClient {
     Current = .live(
       url: url, accessGroup: keychainAccessGroup, headers: headers, configuration: configuration)
 
-    self.authEventChangeSubject = CurrentValueSubject<AuthChangeEvent, Never>(
-      Current.sessionManager.storedSession() != nil ? .signedIn : .signedOut
-    )
+    self.authEventChangeSubject = PassthroughSubject<AuthChangeEvent, Never>()
+
+      Task {
+          do {
+              _ = try await Current.sessionManager.session()
+              self.authEventChangeSubject.send(.signedIn)
+          } catch {
+              self.authEventChangeSubject.send(.signedOut)
+          }
+      }
   }
 
   public convenience init(
